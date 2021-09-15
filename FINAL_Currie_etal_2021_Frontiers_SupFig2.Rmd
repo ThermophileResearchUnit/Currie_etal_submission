@@ -1,6 +1,6 @@
 ---
 title: "Figure2"
-author: "Alexis Marshall"
+author: "Currie et al"
 date: "2 September 2021"
 output: html_document
 ---
