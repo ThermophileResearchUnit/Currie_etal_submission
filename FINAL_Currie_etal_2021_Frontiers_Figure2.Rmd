@@ -1,0 +1,324 @@
+---
+---
+title: "Currie et al Frontiers submission Figure 2 "
+author: "Alexis Marshall"
+date: "2 September 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library("ggplot2")
+library("tidyverse")
+library("phyloseq")
+library("ggpubr")
+library("viridis")
+library("patchwork")
+library("kableExtra")
+```
+
+```{r}
+theme_Publication <- function(base_size=10, base_family="Courier") {
+  library(grid)
+  library(ggthemes)
+  (theme_foundation(base_size=base_size, base_family=base_family)
+    + theme(plot.title = element_text(face = "bold",
+                                      size = rel(1.2), hjust = 0.5),
+            text = element_text(),
+            panel.background = element_rect(colour = NA),
+            plot.background = element_rect(colour = NA),
+            panel.border = element_rect(colour = NA),
+            axis.title = element_text(face = "bold",size = rel(1)),
+            axis.title.y = element_text(angle=90,vjust =2),
+            axis.title.x = element_text(vjust = -0.2),
+            axis.text = element_text(), 
+            axis.line = element_line(colour="black"),
+            axis.ticks = element_line(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            legend.key = element_rect(colour = NA),
+            legend.position = "right",
+            legend.direction = "vertical",
+            legend.key.size= unit(0.2, "cm"),
+            legend.margin = unit(1, "cm"),
+            legend.title = element_blank(),
+            plot.margin=unit(c(10,5,5,5),"mm"),
+            strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+            strip.text = element_text(face="bold")
+    ))
+  
+}
+
+scale_fill_Publication <- function(...){
+  library(scales)
+  discrete_scale("fill","Publication",manual_pal(values = c("#FFCC99", "#fdb462","#386cb0","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")), ...)
+  
+}
+
+scale_colour_Publication <- function(...){
+  library(scales)
+  discrete_scale("colour","Publication",manual_pal(values = c("#FFCC99", "#fdb462","#386cb0","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")), ...)
+  
+}
+
+```
+
+
+```{r}
+# Make phyloseq object OTU table using the flipped McMurdo OTU table
+
+McMurdo_ASV <- t(read.csv("Phyloseq/ASVs_counts.csv", header = TRUE, sep=",", row.names=1))
+McMurdo_ASV = otu_table(McMurdo_ASV, taxa_are_rows = FALSE) #
+
+# Import taxonomic information into phyloseq
+McMurdoSound_taxa <- as.matrix(read.csv("Phyloseq/ASVs_taxonomy.csv", sep=",", row.names=1))
+TAXTABLE1 = tax_table(McMurdoSound_taxa)
+
+# Import sample data
+McMurdoSound_sample <- read.csv("Phyloseq/sample_info.csv", sep=",", row.names=1)
+McMurdoSound_sampledata = sample_data(McMurdoSound_sample)
+
+# import phylogenetic tree. Use the "greengreens" import function as MUSCLE outputs semi-colon dilimited too. 
+McMurdoSound_tree <- read_tree_greengenes("Phyloseq/input.tre")
+McMurdo_phyloseq <- phyloseq(McMurdo_ASV, McMurdoSound_sampledata, TAXTABLE1, McMurdoSound_tree)
+
+McMurdo_ICEonly <- subset_samples(McMurdo_phyloseq, sample!="JWM" & sample!="CE16")
+McMurdo_ICEonly_ASVs = as(otu_table(McMurdo_ICEonly), "matrix")
+McMurdo_ICEonly_sampledata = as(sample_data(McMurdo_ICEonly), "matrix")
+
+```
+
+#Barplot - phylum
+```{r, fig.width=20, fig.height=15, warning=FALSE, message=FALSE}
+
+library(RColorBrewer)
+# Define the number of colors you want
+nb.cols <- 20
+mycolors <- colorRampPalette(brewer.pal(8, "Set3"))(nb.cols)
+
+
+sample_data(McMurdo_phyloseq)$sample = factor(sample_data(McMurdo_phyloseq)$sample, levels = c("CE","NH","JM","TV"))
+McMurdo_ASV_FIG2a <- tax_glom(McMurdo_phyloseq, "Genus")
+McMurdo_ASV_FIG2a = transform_sample_counts(McMurdo_ASV_FIG2a, function(x) x / sum(x)*100)
+
+top20 <- names(sort(taxa_sums(McMurdo_ASV_FIG2a), TRUE)[1:20])
+McMurdoTV.top20 <- prune_taxa(top20, McMurdo_ASV_FIG2a)
+
+tax_table(McMurdoTV.top20)
+
+FIG2a <- plot_bar(McMurdoTV.top20, x="ID", y="Abundance", fill="Genus")  + scale_x_discrete(limits=c("CE1", "CE2", "CE3", "CE4",
+                                                                                         "NH1","NH2","NH3","NH4","NH5"))
+
+FIG2a = FIG2a + theme_Publication(base_size = 30) + theme(axis.text.x = element_text(size=30, angle = 90)) + theme(axis.text.y = element_text(size=30)) + theme(axis.title.x = element_blank()) + theme(axis.title.y = element_text(size=40))
+FIG2a = FIG2a + theme(legend.text = element_text(size = 30, face = "italic"))  + scale_fill_manual(values = mycolors) + theme(legend.title = element_text(size = 40))
+FIG2a = FIG2a + theme(legend.key.size = unit(1.5, "cm"), legend.key.width = unit(0.8,"cm"))
+FIG2a = FIG2a + theme(axis.title.y = element_text(face="plain")) + ylab("Relative abundance (%)")
+
+FIG2a
+
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+
+ANCOM_CE_v_NH_all_classified_DNA <- readRDS("ANCOM/McMurdo_Site_CEvNH_cf.rda")
+ANCOM_site_DNA <- as.matrix(ANCOM_CE_v_NH_all_classified_DNA$detected) #221 ASV detected as have different relative abundances between CE and NH
+
+DNA <- transform_sample_counts(McMurdo_ICEonly, function(x) x/sum(x)*100) #convert into Relative abundance
+ASV <- t(otu_table(DNA)) #extract otu table containing relative abundances
+colSums(ASV) # check that it adds to 100
+ANCOM_subset <- subset(ASV, rownames(t(otu_table(DNA))) %in% (ANCOM_site_DNA)) # extract only the ASVs from the larger phyloseq object that ANCOM identified as interesting. 218 ASVs were subset
+
+tree <- phyloseq::phy_tree(DNA)
+metadata <- sample_data(DNA)
+tax <- tax_table(DNA)
+
+ANCOM_phyloseq <- phyloseq(ANCOM_subset, metadata, tree, tax)
+
+ANCOM_phyloseq_family <- tax_glom(ANCOM_phyloseq, "Family") # merge at level of interest - this is an addition equation 
+tax_table(ANCOM_phyloseq_family)
+ANCOM_phyloseq_family  = filter_taxa(ANCOM_phyloseq_family , function(x) sum(x) > 1.5, TRUE) # cut out the small stuff
+
+OTU_counts <- otu_table(ANCOM_phyloseq_family )
+rowSums(OTU_counts) #Family level that cumulatively contain more than 1.5% relative abundace across samples
+tax_table(ANCOM_phyloseq_family ) #25 taxa that will be displayed in Fig 2B
+
+sample_data(ANCOM_phyloseq_family)$sample <- factor(c("CE1", "CE2","CE3","CE4","NH1", "NH2", "NH3", "NH4", "NH5")) # rename the factor 
+
+# Make heat map of ancom identified taxa and export
+heatmap_DNA <- plot_heatmap(ANCOM_phyloseq_family, taxa.label= "Family", sample.label = "sample", sample.order = "sample", taxa.order = "Phylum")
+heatmap_DNA =  heatmap_DNA +  facet_grid(Class ~., scales="free_y", space = "free_y") + 
+  theme_Publication(base_size=30) + theme(panel.spacing = unit(0.2,"lines"), axis.text.x = element_text(size = 30, hjust=1), 
+                                          axis.title.x = element_blank(), axis.title.y = element_blank(), axis.text.y = element_text(size = 30, face = "italic"), 
+                                          legend.position= "left") + 
+  theme(strip.text.y = element_text(angle = 360, size=30, face = "bold.italic")) +
+  theme(strip.background = element_blank()) + theme(legend.title = element_text(size = 30, angle = 90)) +
+  theme(legend.key.size = unit(3,"line"), legend.title = element_text(size = 30)) + labs(fill = "Relative abundance (%)") + scale_fill_viridis(option="A", direction = -1) 
+
+FIG2b <- heatmap_DNA + theme(plot.margin = unit(c(1, 1, 1, 5), "cm")) + theme(axis.text.x = element_text(size=30, angle = 90)) 
+
+```
+
+
+```{r}
+
+
+figure2 = (FIG2a / FIG2b) + plot_annotation(tag_levels = 'A') & theme(plot.tag = element_text(size=100)) 
+
+ggexport(figure2, filename ="Figure_2.tiff", width = 8000, height = 9000, res = 300)
+
+
+
+```
+
+
+
+
+
+
+
+```{r}
+
+
+phylumabundance <- McMurdo_ICEonly %>%
+  tax_glom(taxrank = "Phylum") %>%                     # agglomerate at phylum level
+  transform_sample_counts(function(x) {x/sum(x)} * 100 ) %>% # Transform to rel. abundance
+  psmelt() %>%   
+  group_by(Phylum) %>%
+  arrange(Abundance)
+
+
+phylum <- phylumabundance %>%
+  select(Phylum, sample_type, Abundance, ID) %>%
+  group_by(Phylum, sample_type) %>%
+  summarize(
+    avg_abundance = mean(Abundance), sd_abundance  = sd(Abundance)
+    ) %>%
+  filter(avg_abundance > 0.01) %>% arrange(desc(avg_abundance))
+
+
+phylum %>% kbl(caption = "Phylum", digits = 1) %>%
+  kable_classic(full_width = F, html_font = "Arial")
+
+
+
+```
+
+
+#Relative abundaces 
+
+```{r}
+
+
+classabundance <- McMurdo_ICEonly %>%
+  tax_glom(taxrank = "Class") %>%                    
+  transform_sample_counts(function(x) {x/sum(x)} * 100 ) %>% # Transform to rel. abundance
+  psmelt() %>%   
+  group_by(Class) %>%
+  arrange(Abundance)
+
+
+class <- classabundance %>%
+  select(Class, sample_type, Abundance, ID) %>%
+  group_by(Class, sample_type) %>%
+  summarize(
+    avg_abundance = mean(Abundance), sd_abundance  = sd(Abundance)
+    ) %>%
+  filter(avg_abundance > 0.01) %>% arrange(desc(avg_abundance))
+
+
+class %>% kbl(caption = "Class", digits = 1) %>%
+  kable_classic(full_width = F, html_font = "Arial")
+
+
+
+```
+
+
+
+```{r}
+
+
+orderabundance <- McMurdo_ICEonly %>%
+  tax_glom(taxrank = "Order") %>%                    
+  transform_sample_counts(function(x) {x/sum(x)} * 100 ) %>% # Transform to rel. abundance
+  psmelt() %>%   
+  group_by(Order) %>%
+  arrange(Abundance)
+
+
+order <- orderabundance %>%
+  select(Order, sample_type, Abundance, ID) %>%
+  group_by(Order, sample_type) %>%
+  summarize(
+    avg_abundance = mean(Abundance), sd_abundance  = sd(Abundance)
+    ) %>%
+  filter(avg_abundance > 0.01) %>% arrange(desc(avg_abundance))
+
+
+order %>% kbl(caption = "Order", digits = 1) %>%
+  kable_classic(full_width = F, html_font = "Arial")
+
+
+
+```
+
+```{r}
+
+
+familyabundance <- McMurdo_ICEonly %>%
+  tax_glom(taxrank = "Family") %>%               
+  transform_sample_counts(function(x) {x/sum(x)} * 100 ) %>% # Transform to rel. abundance
+  psmelt() %>%   
+  group_by(Family) %>%
+  arrange(Abundance)
+
+
+family <- familyabundance %>%
+  select(Family, sample_type, Abundance, ID) %>%
+  group_by(Family, sample_type) %>%
+  summarize(
+    avg_abundance = mean(Abundance), sd_abundance  = sd(Abundance)
+    ) %>%
+  filter(avg_abundance > 0.01) %>% arrange(desc(avg_abundance))
+
+
+family %>% kbl(caption = "Family", digits = 1) %>%
+  kable_classic(full_width = F, html_font = "Arial")
+
+
+
+```
+
+
+
+```{r}
+
+
+genusabundance <- McMurdo_ICEonly %>%
+  tax_glom(taxrank = "Genus") %>%                
+  transform_sample_counts(function(x) {x/sum(x)} * 100 ) %>% # Transform to rel. abundance
+  psmelt() %>%   
+  group_by(Genus) %>%
+  arrange(Abundance)
+
+
+genus <- genusabundance %>%
+  select(Genus, sample_type, Abundance, ID) %>%
+  group_by(Genus, sample_type) %>%
+  summarize(
+    avg_abundance = mean(Abundance), sd_abundance  = sd(Abundance)
+    ) %>%
+  filter(avg_abundance > 0.01) %>% arrange(desc(avg_abundance))
+
+
+genus %>% kbl(caption = "Genus", digits = 1) %>%
+  kable_classic(full_width = F, html_font = "Arial")
+
+
+
+```

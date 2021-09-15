@@ -1,0 +1,19 @@
+,sample_name,ID,sample,sample_type,year,numbered_sample,neg,conc
+CE1,Cape Evans,CE1,CE,CE,2017,1     CE,FALSE,3
+CE2,Cape Evans,CE2,CE,CE,2017,1     CE,FALSE,3
+CE3,Cape Evans,CE3,CE,CE,2017,1     CE,FALSE,3
+CE4,Cape Evans,CE4,CE,CE,2017,1     CE,FALSE,3
+CE161,Cape Evans 2016,CE161,CE16,CE16,2016,2        CE16,FALSE,3
+CE162,Cape Evans 2016,CE162,CE16,CE16,2016,2        CE16,FALSE,3
+CE163,Cape Evans 2016,CE163,CE16,CE16,2016,2        CE16,FALSE,3
+CE164,Cape Evans 2016,CE164,CE16,CE16,2016,2        CE16,FALSE,3
+CE165,Cape Evans 2016,CE165,CE16,CE16,2016,2        CE16,FALSE,3
+JWM1,Jamesway Moat,SM1,JWM,JWM,2017,4                JWM,FALSE,3
+JWM2,Jamesway Moat,SM2,JWM,JWM,2017,4                JWM,FALSE,3
+JWM3,Jamesway Moat,SM3,JWM,JWM,2017,4                JWM,FALSE,3
+JWM4,Jamesway Moat,SM4,JWM,JWM,2017,4                JWM,FALSE,3
+NH1,New Harbour,NH1,NH,NH,2017,3                          NH,FALSE,3
+NH2,New Harbour,NH2,NH,NH,2017,3                          NH,FALSE,3
+NH3,New Harbour,NH3,NH,NH,2017,3                          NH,FALSE,3
+NH4,New Harbour,NH4,NH,NH,2017,3                          NH,FALSE,3
+NH5,New Harbour,NH5,NH,NH,2017,3                          NH,FALSE,3

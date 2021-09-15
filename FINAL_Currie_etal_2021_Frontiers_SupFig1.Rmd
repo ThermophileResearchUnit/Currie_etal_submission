@@ -1,0 +1,220 @@
+---
+title: "Rarecurve"
+author: "Alexis Marshall"
+date: "10 September 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#library("vegan")
+library("ggplot2")
+library("phyloseq")
+library("ggpubr")
+
+```
+
+```{r, include=FALSE}
+#' Make a rarefaction curve using ggplot2
+#' @param physeq_object A phyloseq class object, from which abundance data are extracted
+#' @param step Step Size for sample size in rarefaction curves
+#' @param label Default `NULL`. Character string. The name of the variable to map to text labels on the plot. Similar to color option but for plotting text.
+#' @param color Default `NULL`. Character string. The name of the variable to map to the colors in the plot. This can be a sample variables among the set returned by sample_variables(physeq_object) or taxonomic rank, among the set returned by rank_names(physeq_object)
+#' @param plot default `TRUE`. Logical. Should the graph be plotted
+#' @param parallel default `FALSE`. Logical. Should rarefaction be parallelized
+#' @param se default `TRUE`. Logical. Should standard errors be calculated.
+#' @examples
+#' good_taxon_table <- data.frame(sum.taxonomy = c("a;b;c;d;f;u", "p;q;r;s;t;u"),
+#' site_1 = c(0,1), site_2 = c(10, 20))
+#' good_maps <- data.frame(site = c("site_1", "site_2"),
+#' season = c("wet", "dry"), host = c("oak", "sage"))
+#' physeq_object <- convert_anacapa_to_phyloseq(good_taxon_table, good_maps)
+#' ggrare(physeq_object, step = 20, se = TRUE)
+#' @export
+
+ggrare <- function(physeq_object, step = 10, label = NULL, color = NULL, plot = TRUE, parallel = FALSE, se = TRUE) {
+  
+  x <- methods::as(phyloseq::otu_table(physeq_object), "matrix")
+  if (phyloseq::taxa_are_rows(physeq_object)) { x <- t(x) }
+  
+  ## This script is adapted from vegan `rarecurve` function
+  tot <- rowSums(x)
+  S <- rowSums(x > 0)
+  nr <- nrow(x)
+  
+  rarefun <- function(i) {
+    cat(paste("rarefying sample", rownames(x)[i]), sep = "\n")
+    n <- seq(1, tot[i], by = step)
+    if (n[length(n)] != tot[i]) {
+      n <- c(n, tot[i])
+    }
+    y <- vegan::rarefy(x[i, ,drop = FALSE], n, se = se)
+    if (nrow(y) != 1) {
+      rownames(y) <- c(".S", ".se")
+      return(data.frame(t(y), Size = n, Sample = rownames(x)[i]))
+    } else {
+      return(data.frame(.S = y[1, ], Size = n, Sample = rownames(x)[i]))
+    }
+  }
+  if (parallel) {
+    out <- parallel::mclapply(seq_len(nr), rarefun, mc.preschedule = FALSE)
+  } else {
+    out <- lapply(seq_len(nr), rarefun)
+  }
+  df <- do.call(rbind, out)
+  
+  # Get sample data
+  if (!is.null(phyloseq::sample_data(physeq_object, FALSE))) {
+    sdf <- methods::as(phyloseq::sample_data(physeq_object), "data.frame")
+    sdf$Sample <- rownames(sdf)
+    data <- merge(df, sdf, by = "Sample")
+    labels <- data.frame(x = tot, y = S, Sample = rownames(x))
+    labels <- merge(labels, sdf, by = "Sample")
+  }
+  
+  # Add, any custom-supplied plot-mapped variables
+  if ( length(color) > 1 ) {
+    data$color <- color
+    names(data)[names(data) == "color"] <- deparse(substitute(color))
+    color <- deparse(substitute(color))
+  }
+  
+  if ( length(label) > 1 ) {
+    labels$label <- label
+    names(labels)[names(labels) == "label"] <- deparse(substitute(label))
+    label <- deparse(substitute(label))
+  }
+  
+  p <- ggplot2::ggplot(data = data,
+                       ggplot2::aes_string(x = "Size",
+                                           y = ".S",
+                                           group = "Sample",
+                                           color = color))
+  
+  p <- p + ggplot2::labs(x = "Sequence Sample Size", y = "Species Richness")
+  
+  if (!is.null(label)) {
+    p <- p + ggplot2::geom_text(data = labels,
+                                ggplot2::aes_string(x = "x",
+                                                    y = "y",
+                                                    label = label,
+                                                    color = color),
+                                size = 4, hjust = 0)
+  }
+  
+  p <- p + ggplot2::geom_line()
+  if (se) { ## add standard error if available
+    p <- p +
+      ggplot2::geom_ribbon(ggplot2::aes_string(ymin = ".S - .se",
+                                               ymax = ".S + .se",
+                                               color = NULL,
+                                               fill = color),
+                           alpha = 0.2)
+  }
+  if (plot) {
+    plot(p)
+  }
+  invisible(p)
+}
+
+```
+
+
+
+
+
+# Make phyloseq object with Taylor Valley samples
+```{r, echo=T, results='hide', message = FALSE, warnings=FALSE}
+
+# Make phyloseq object OTU table using the flipped McMurdo OTU table
+
+McMurdo_ASV <- t(read.csv("TaylorValleyfiles/ASVs_counts.csv", header = TRUE, sep=",", row.names=1))
+McMurdo_ASV = otu_table(McMurdo_ASV, taxa_are_rows = FALSE) #
+
+# Import taxonomic information into phyloseq
+McMurdoSound_taxa <- as.matrix(read.csv("TaylorValleyfiles/ASVs_taxonomy_no_chloro_020921.csv", sep=",", row.names=1))
+TAXTABLE1 = tax_table(McMurdoSound_taxa)
+
+# Import sample data
+McMurdoSound_sample <- read.csv("TaylorValleyfiles/sample_info_030921.csv", sep=",", row.names=1)
+McMurdoSound_sampledata = sample_data(McMurdoSound_sample)
+
+# import phylogenetic tree. Use the "greengreens" import function as MUSCLE outputs semi-colon dilimited too. 
+McMurdoSound_tree <- read_tree_greengenes("TaylorValleyfiles/NZTABS_CENH_tree.phy")
+taxa_names(McMurdoSound_tree) <- sub(">.*", "", taxa_names(McMurdoSound_tree))
+
+McMurdo_phyloseq_Taylor <- phyloseq(McMurdo_ASV, McMurdoSound_sampledata, TAXTABLE1, McMurdoSound_tree)
+McMurdo_phyloseq_Taylor
+
+
+```
+# Data Quality Control and Identification of Outliers
+# Generate and view rarefaction curves to view how well each sample represents the diversity.
+```{r, fig.height= 8, fig.width= 15, echo = T, results = 'hide', message=FALSE}
+
+# ASV matrix rarefaction curve
+SupFig1A <- ggrare(McMurdo_phyloseq_Taylor, step = 200, color = "sample", se = FALSE, plot = FALSE)
+SupFig1A <- SupFig1A +
+  theme(plot.title = element_text(size=25), axis.text = element_text(colour = "black"), axis.title = element_text(size=25), panel.border = element_rect(fill = NA), panel.background = element_rect(fill = 'white', colour = 'white'), plot.margin = unit(c(1,1,1,1), "cm")) + theme(legend.title = element_text(size = 25)) + theme(axis.text = element_text(size = 20)) + theme(legend.key.size = unit(1.5, "cm"),
+  legend.key.width = unit(1,"cm")) + theme(legend.text = element_text(size=25)) 
+#SupFig1A = SupFig1A + scale_color_manual(values = c("#A50026", "#313695", "#74ADD1"))
+SupFig1A
+
+#ggexport(SupFig1A, filename ="rarefaction_curve.tiff", width = 3500, height = 2000, res = 300)
+
+```
+
+
+
+```{r}
+# Make phyloseq object OTU table using the flipped McMurdo OTU table
+
+McMurdo_ASV <- t(read.csv("Phyloseq/ASVs_counts.csv", header = TRUE, sep=",", row.names=1))
+McMurdo_ASV = otu_table(McMurdo_ASV, taxa_are_rows = FALSE) #
+
+# Import taxonomic information into phyloseq
+McMurdoSound_taxa <- as.matrix(read.csv("Phyloseq/ASVs_taxonomy.csv", sep=",", row.names=1))
+TAXTABLE1 = tax_table(McMurdoSound_taxa)
+
+# Import sample data
+McMurdoSound_sample <- read.csv("Phyloseq/sample_info.csv", sep=",", row.names=1)
+McMurdoSound_sampledata = sample_data(McMurdoSound_sample)
+
+# import phylogenetic tree. Use the "greengreens" import function as MUSCLE outputs semi-colon dilimited too. 
+McMurdoSound_tree <- read_tree_greengenes("Phyloseq/input.tre")
+
+McMurdo_phyloseq <- phyloseq(McMurdo_ASV, McMurdoSound_sampledata, TAXTABLE1, McMurdoSound_tree)
+
+McMurdo_ICEonly <- subset_samples(McMurdo_phyloseq, sample!="JWM" & sample!="CE16")
+McMurdo_ICEonly_ASVs = as(otu_table(McMurdo_ICEonly), "matrix")
+McMurdo_ICEonly_sampledata = as(sample_data(McMurdo_ICEonly), "matrix")
+
+```
+
+```{r, fig.height= 8, fig.width= 15, echo = T, results = 'hide', message=FALSE}
+
+# ASV matrix rarefaction curve
+SupFig1B <- ggrare(McMurdo_ICEonly, step = 200, color = "sample", se = FALSE, plot = FALSE)
+SupFig1B <- SupFig1B +
+  theme(plot.title = element_text(size=25), axis.text = element_text(colour = "black"), axis.title = element_text(size=25), panel.border = element_rect(fill = NA), panel.background = element_rect(fill = 'white', colour = 'white'), plot.margin = unit(c(1,1,1,1), "cm")) + theme(legend.title = element_text(size = 25)) + theme(axis.text = element_text(size = 20)) + theme(legend.key.size = unit(1.5, "cm"),
+  legend.key.width = unit(1,"cm")) + theme(legend.text = element_text(size=25)) 
+#SupFig1A = SupFig1A + scale_color_manual(values = c("#A50026", "#313695", "#74ADD1"))
+SupFig1B
+
+
+
+```
+
+
+```{r}
+
+supFig1 = (SupFig1A / SupFig1B) + plot_annotation(tag_levels = 'A') & theme(plot.tag = element_text(size=40))
+
+ggexport(supFig1, filename ="SuppFigure_1.tiff", width = 4000, height = 4000, res = 300)
+
+
+
+```

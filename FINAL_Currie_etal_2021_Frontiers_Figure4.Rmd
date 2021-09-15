@@ -1,0 +1,277 @@
+
+---
+title: "Figure3"
+author: "Alexis Marshall"
+date: "2 September 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library("vegan")
+library("ggplot2")
+library("tidyverse")
+library("DT")
+library("phyloseq")
+library("ggpubr")
+library("factoextra")
+library("picante")
+library("viridis")
+library("philr")
+library("ape")
+library("exactRankTests")
+library("nlme")
+library("compositions")
+library("tinytex")
+library("patchwork")
+library("DivNet")
+library("breakaway")
+```
+
+```{r}
+library("vegan")
+library("ggplot2")
+library("phyloseq")
+library("ggpubr")
+library("picante")
+library("patchwork")
+library("DivNet")
+library("breakaway")
+```
+
+
+
+```{r}
+# Make phyloseq object OTU table using the flipped McMurdo OTU table
+
+McMurdo_ASV <- t(read.csv("Phyloseq/ASVs_counts.csv", header = TRUE, sep=",", row.names=1))
+McMurdo_ASV = otu_table(McMurdo_ASV, taxa_are_rows = FALSE) #
+
+# Import taxonomic information into phyloseq
+McMurdoSound_taxa <- as.matrix(read.csv("Phyloseq/ASVs_taxonomy.csv", sep=",", row.names=1))
+TAXTABLE1 = tax_table(McMurdoSound_taxa)
+
+# Import sample data
+McMurdoSound_sample <- read.csv("Phyloseq/sample_info.csv", sep=",", row.names=1)
+McMurdoSound_sampledata = sample_data(McMurdoSound_sample)
+
+# import phylogenetic tree. Use the "greengreens" import function as MUSCLE outputs semi-colon dilimited too. 
+McMurdoSound_tree <- read_tree_greengenes("Phyloseq/input.tre")
+
+#McMurdo_ICEonly <- phyloseq(McMurdo_ASV, McMurdoSound_sampledata, TAXTABLE1, McMurdoSound_tree)
+
+McMurdo_phyloseq <- phyloseq(McMurdo_ASV, McMurdoSound_sampledata, TAXTABLE1, McMurdoSound_tree)
+
+McMurdo_ICEonly <- subset_samples(McMurdo_phyloseq, sample!="JWM" & sample!="CE16")
+McMurdo_ICEonly_ASVs = as(otu_table(McMurdo_ICEonly), "matrix")
+McMurdo_ICEonly_sampledata = as(sample_data(McMurdo_ICEonly), "matrix")
+
+```
+
+
+#Calculate Breakaway alpha diversity
+```{r}
+
+richness_McMurdoSound_d <- breakaway(McMurdo_ICEonly) 
+richness_McMurdoSound_d = summary(richness_McMurdoSound_d)
+alpha_breakaway <- cbind(richness_McMurdoSound_d, McMurdo_ICEonly_sampledata)
+
+richness_McMurdoSound_e <- sample_shannon(McMurdo_ICEonly)
+richness_McMurdoSound_e = summary(richness_McMurdoSound_e)
+shannon_breakaway <- cbind(richness_McMurdoSound_e, McMurdo_ICEonly_sampledata)
+
+```
+
+#Calculate Phylogenetic diversity
+```{r}
+
+phy_PD_McMurdoSound <- pd(McMurdo_ICEonly_ASVs, McMurdoSound_tree, include.root = FALSE)
+phy.dist <- cophenetic(McMurdoSound_tree)
+
+# measures of Phylogenetic divergence (MPD and MNTD)
+
+# Mean pairwise distance (MPD) is the mean phylogenetic distance (i.e. branch length) among all pairs of species within a community
+McMurdo.mpd<-mpd(McMurdo_ICEonly_ASVs, phy.dist)
+McMurdo.mpd 
+
+# Mean nearest taxon distance (MNTD) or mean nearest neighbor distance (MNND), is the mean distance between each species within a community and its closest relative
+# measures phylogenetic structure of the tree tips
+McMurdo.mntd<-mntd(McMurdo_ICEonly_ASVs, phy.dist)
+McMurdo.mntd
+
+#MPD and MNND are useful summary statistics, but in order to compare values among different communities we need to standardize the values. The net-relatedness index (NRI) and nearest taxon index (NTI) do this.
+# NRI = -1*(MPDobs-mean MPDnull/ sdMPDnull)
+# NTI = -1*(MNTDobs-mean MNTDnull/ sdMNTDnull)
+
+#SES
+
+McMurdo.ses.mpd<-ses.mpd(McMurdo_ICEonly_ASVs, phy.dist, null.model = "taxa.labels", abundance.weighted = FALSE, runs = 100)
+McMurdo.ses.mpd # mpd.obs.z = standardized MPD (equivalent to -NRI)
+
+McMurdo.ses.mntd<-ses.mntd(McMurdo_ICEonly_ASVs, phy.dist, null.model = "taxa.labels", abundance.weighted = FALSE, runs = 100)
+McMurdo.ses.mntd
+
+alpha_PD_Ses_mntd <- cbind(McMurdo.ses.mntd,   McMurdo_ICEonly_sampledata)
+alpha_PD_Ses_mpd <- cbind(McMurdo.ses.mpd,   McMurdo_ICEonly_sampledata)
+
+
+```
+
+#Plot taxonomic and phylogenetic alpha diversity
+```{r, fig.height= 25, fig.width= 10, warning=FALSE, message=FALSE}}
+
+plot4a <- ggplot(alpha_breakaway, aes(x=sample, y=estimate, fill =sample, shape=sample)) + geom_boxplot(lwd=1.2) + geom_dotplot(binaxis='y', stackdir='center', dotsize=1.5) + labs(x="Sample", y = "Species richness") + theme_classic()
+plot4a = plot4a + scale_x_discrete(limits=c("CE", "NH"))
+plot4a = plot4a + scale_shape_manual(values=c(16, 15,16, 15))
+#plot4a = plot4a + scale_fill_viridis_d(alpha = 1, begin = 0.4, end = 0.9, direction = 1, option = "D", aesthetics = "fill")
+#plot4a = plot4a + scale_fill_manual(values = c("#A50026", "#74ADD1")) 
+plot4a = plot4a + theme(legend.position="none") + theme(axis.title.y = element_text(size = rel(2.5), angle = 90))
+plot4a = plot4a + theme(axis.title.x = element_blank()) + theme(axis.text = element_text(size = 30)) + theme(axis.line = element_line(size = 1.2)) + theme(axis.title.y = element_text(size = 30))
+
+
+all_alpha <- alpha_breakaway %>%
+  select(sample, estimate) %>%
+  group_by(sample) %>%
+  summarize(
+    avg_abundance = mean(estimate), sd_abundance  = sd(estimate)
+    ) %>% arrange(desc(avg_abundance))
+
+
+all_alpha %>% kbl(caption = "alpha_breakaway", digits = 2) %>%
+  kable_classic(full_width = F, html_font = "Arial")
+
+
+
+plot4b <-ggplot(shannon_breakaway, aes(x=sample, y=estimate, fill =sample, shape=sample)) + geom_boxplot(lwd=1.2) +
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=1.5) +
+  labs(x="Sample", y = "Shannon diversity")+
+  theme_classic()
+plot4b = plot4b + scale_x_discrete(limits=c("CE", "NH"))
+plot4b = plot4b + scale_shape_manual(values=c(16, 15,16, 15))
+#plot4b = plot4b + scale_fill_viridis_d(alpha = 1, begin = 0.4, end = 0.9, direction = 1, option = "D", aesthetics = "fill")
+#plot4b = plot4b + scale_fill_manual(values = c("#A50026", "#74ADD1")) 
+plot4b = plot4b + theme(legend.position="none") + theme(axis.title.y = element_text(size = rel(2.5), angle = 90))
+plot4b = plot4b + theme(axis.title.x = element_blank()) + theme(axis.text = element_text(size = 30)) + theme(axis.line = element_line(size = 1.2)) + theme(axis.title.y = element_text(size = 30))
+
+
+all_shannon <- shannon_breakaway %>%
+  select(sample, estimate) %>%
+  group_by(sample) %>%
+  summarize(
+    avg_abundance = mean(estimate), sd_abundance  = sd(estimate)
+    ) %>% arrange(desc(avg_abundance))
+
+
+all_shannon %>% kbl(caption = "shannon_breakaway", digits = 2) %>%
+  kable_classic(full_width = F, html_font = "Arial")
+
+
+plot4c <- ggplot(alpha_PD_Ses_mpd, aes(x=sample, y=mpd.obs.z, fill =sample, shape=sample)) + geom_boxplot(lwd=1.2) + geom_dotplot(binaxis='y', stackdir='center', dotsize=1.5) + labs(x="Sample", y = "Nearest Relative Index") + theme_classic()
+plot4c = plot4c + scale_x_discrete(limits=c("CE", "NH"))
+#plot4c = plot4c + ylim(-20, -10)
+plot4c = plot4c + scale_shape_manual(values=c(16, 15, 16, 15))
+#plot4c = plot4c + scale_fill_viridis_d(alpha = 1, begin = 0.4, end = 0.9, direction = 1, option = "D", aesthetics = "fill")#plot4c = plot4c + scale_fill_manual(values = c("#A50026", "#74ADD1")) 
+plot4c = plot4c + theme(legend.position="none") + theme(axis.title.y = element_text(size = rel(2.5), angle = 90))
+plot4c = plot4c + theme(axis.title.x = element_blank()) + theme(axis.text = element_text(size = 30)) + theme(axis.line = element_line(size = 1.2)) + theme(axis.title.y = element_text(size = 30))
+
+
+all_mpd <- alpha_PD_Ses_mpd %>%
+  select(sample, mpd.obs.z) %>%
+  group_by(sample) %>%
+  summarize(
+    avg_abundance = mean(mpd.obs.z), sd_abundance  = sd(mpd.obs.z)
+    ) %>% arrange(desc(avg_abundance))
+
+
+all_mpd %>% kbl(caption = "alpha_PD_Ses_mpd", digits = 2) %>%
+  kable_classic(full_width = F, html_font = "Arial")
+
+
+
+
+
+plot4d <- ggplot(alpha_PD_Ses_mntd, aes(x=sample, y=mntd.obs.z, fill= sample, shape=sample)) + geom_boxplot(lwd=1.2) + geom_dotplot(binaxis='y', stackdir='center', dotsize=1.5) + labs(x="Sample", y = "Nearest Taxon Index") + theme_classic() + scale_x_discrete(limits=c("CE", "NH"))
+#plot4d = plot4d + ylim(-20, -10)
+plot4d = plot4d + scale_shape_manual(values=c(16, 15, 16, 15))
+#plot4d = plot4d + scale_fill_viridis_d(alpha = 1, begin = 0.4, end = 0.9, direction = 1, option = "D", aesthetics = "fill")#plot4d = plot4d + scale_fill_manual(values = c("#A50026", "#74ADD1")) 
+plot4d = plot4d + theme(axis.title.y = element_text(size = rel(2.5), angle = 90)) + theme(legend.position="none")
+plot4d = plot4d + theme(axis.title.x = element_blank()) + theme(axis.text = element_text(size = 30)) + theme(axis.line = element_line(size = 1.2)) + theme(axis.title.y = element_text(size = 30))
+
+
+all_mntd <- alpha_PD_Ses_mntd %>%
+  select(sample, mntd.obs.z) %>%
+  group_by(sample) %>%
+  summarize(
+    avg_abundance = mean(mntd.obs.z), sd_abundance  = sd(mntd.obs.z)
+    ) %>% arrange(desc(avg_abundance))
+
+
+all_mntd %>% kbl(caption = "alpha_PD_Ses_mntd", digits = 2) %>%
+  kable_classic(full_width = F, html_font = "Arial")
+
+
+
+
+
+
+figure4 = ((plot4a + plot4b) / (plot4c + plot4d))  + plot_annotation(tag_levels = 'A') & theme(plot.tag = element_text(size=60))
+
+ggexport(figure4, filename ="Figure_4.tiff", width = 4000, height = 4000, res = 300)
+
+```
+
+#Significance of alpha diversity results
+```{r, message=FALSE}
+#Breakaway results
+
+alpha_breakaway$estimate
+
+
+#Species richness - breakaway
+# CE and NH W = 5, p-value = 0.2857
+x <- c(1804.253, 1714.424, 1672.982, 1630.839) #CE 
+y <- c(1706.295, 1760.134, 1772.571, 1810.020, 1784.518) #NH 
+wilcox.test(x, y)  
+
+shannon_breakaway$estimate
+
+#Shannon
+# CE and NH W = 0, p-value = 0.01587
+x <- c(5.723865, 5.665146, 5.560474, 6.026777) #CE 
+y <- c(6.179958, 6.181882, 6.185931, 6.176012, 6.163381 ) #NH 
+wilcox.test(x, y)  
+
+
+alpha_PD_Ses_mpd$mpd.obs.z
+# ses.mpd
+# CE and NH W = 20, p-value = 0.01587
+x <- c(-13.05260, -13.12208, -14.90473, -16.42102) #CE 
+y <- c( -16.59810, -19.02114, -16.60567, -17.83727, -17.29760) #NH 
+wilcox.test(x, y)  
+
+
+alpha_PD_Ses_mntd$mntd.obs.z
+# ses.mntd
+# CE and NH W = 20, p-value = 0.01587
+x <- c(-13.99553, -16.58843, -15.55805, -14.59811 ) #CE 
+y <- c(-17.73908, -17.57976, -17.08688, -18.90305, -16.72337) #NH 
+wilcox.test(x, y)  
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
