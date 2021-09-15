@@ -1,6 +1,6 @@
 ---
 title: "Rarecurve"
-author: "Alexis Marshall"
+author: "Currie et al"
 date: "10 September 2021"
 output: html_document
 ---
